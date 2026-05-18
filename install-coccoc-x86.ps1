@@ -8,6 +8,76 @@ Cốc Cốc Browser Silent Installer
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 chcp 65001 | Out-Null
 
+function Resolve-CocCocBrowserPath {
+    $candidates = @(
+        "${env:ProgramFiles}\CocCoc\Browser\Application\browser.exe",
+        "${env:ProgramFiles(x86)}\CocCoc\Browser\Application\browser.exe"
+    )
+
+    foreach ($candidate in $candidates) {
+        if (Test-Path -LiteralPath $candidate) {
+            return $candidate
+        }
+    }
+
+    return $null
+}
+
+function Resolve-CocCocVersionDir([string]$browserPath) {
+    if (-not $browserPath) {
+        return $null
+    }
+
+    $applicationDir = Split-Path -Parent $browserPath
+    if (-not (Test-Path -LiteralPath $applicationDir)) {
+        return $null
+    }
+
+    Get-ChildItem -LiteralPath $applicationDir -Directory -ErrorAction SilentlyContinue |
+        Where-Object {
+            $_.Name -match '^\d+\.\d+\.\d+\.\d+$' -and
+            (Test-Path -LiteralPath (Join-Path $_.FullName "browser.dll"))
+        } |
+        Sort-Object { [version]$_.Name } -Descending |
+        Select-Object -First 1
+}
+
+function Invoke-CocCocPostInstallCleanup([string]$browserPath) {
+    if (-not $browserPath) {
+        Write-Host "Skipping post-install cleanup because installed browser.exe was not found." -ForegroundColor Yellow
+        return
+    }
+
+    $versionDir = Resolve-CocCocVersionDir -browserPath $browserPath
+    if (-not $versionDir) {
+        Write-Host "Skipping post-install cleanup because no Chromium version folder was found." -ForegroundColor Yellow
+        return
+    }
+
+    Write-Host "`nRunning post-install cleanup in $($versionDir.FullName)..." -ForegroundColor Cyan
+
+    $installerDir = Join-Path $versionDir.FullName "Installer"
+    @("browser.7z", "chrmstp.exe", "setup.exe") | ForEach-Object {
+        $target = Join-Path $installerDir $_
+        Remove-Item -LiteralPath $target -Force -ErrorAction SilentlyContinue
+    }
+
+    Remove-Item -LiteralPath (Join-Path $versionDir.FullName "browser.dll.BAK") -Force -ErrorAction SilentlyContinue
+
+    $extensionsDir = Join-Path $versionDir.FullName "Extensions"
+    @(
+        "cashback.crx",
+        "en2vi.crx",
+        "cache.crx",
+        "afaljjbleihmahhpckngondmgohleljb.json",
+        "gcopfpdkmpdacdmbjonfjmbnccmnjdoi.json",
+        "gfgbmghkdjckppeomloefmbphdfmokgd.json"
+    ) | ForEach-Object {
+        $target = Join-Path $extensionsDir $_
+        Remove-Item -LiteralPath $target -Force -ErrorAction SilentlyContinue
+    }
+}
+
 # Require Administrator
 if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
     Start-Process powershell.exe "-NoProfile -ExecutionPolicy Bypass -Command `"irm https://go.bibica.net/coccoc-x86 | iex`"" -Verb RunAs
@@ -75,12 +145,9 @@ try {
 } catch {}
 
 # Create shortcuts
-$browserPath = "${env:ProgramFiles}\CocCoc\Browser\Application\browser.exe"
-if (-not (Test-Path $browserPath)) {
-    $browserPath = "${env:ProgramFiles(x86)}\CocCoc\Browser\Application\browser.exe"
-}
+$browserPath = Resolve-CocCocBrowserPath
 
-if (Test-Path $browserPath) {
+if ($browserPath -and (Test-Path -LiteralPath $browserPath)) {
     # Remove old shortcuts from ALL locations
     @(
         [Environment]::GetFolderPath("Desktop"),
@@ -118,6 +185,7 @@ if (Test-Path $browserPath) {
 }
 
 # Cleanup
+Invoke-CocCocPostInstallCleanup -browserPath $browserPath
 Remove-Item $installer -ErrorAction SilentlyContinue
 
 Write-Host "`nCốc Cốc x86 installation completed!" -BackgroundColor DarkGreen

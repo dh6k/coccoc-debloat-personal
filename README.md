@@ -85,6 +85,21 @@ C:\Program Files\CocCoc\Browser\Application\a.b.x.y
 --no-first-run --no-default-browser-check --disable-features=CocCocSplitView,SidePanel --profile-directory=Default
 ```
 
+12. Dọn file thừa trong thư mục version `a.b.x.y`:
+
+```text
+Installer\browser.7z
+Installer\chrmstp.exe
+Installer\setup.exe
+browser.dll.BAK
+Extensions\cashback.crx
+Extensions\en2vi.crx
+Extensions\cache.crx
+Extensions\afaljjbleihmahhpckngondmgohleljb.json
+Extensions\gcopfpdkmpdacdmbjonfjmbnccmnjdoi.json
+Extensions\gfgbmghkdjckppeomloefmbphdfmokgd.json
+```
+
 ## Khác nhau giữa bản online và local
 
 | Hạng mục | `install-coccoc-online.ps1` | `install-coccoc.ps1` |
@@ -124,13 +139,15 @@ Repo hiện tại chưa có script khôi phục updater/crash handler về file 
 
 `mv2.ps1` patch trực tiếp `browser.dll`. Installer chính chỉ gọi patch trên `browser.dll` của Cốc Cốc vừa cài, không quét registry để patch Chrome hoặc trình duyệt khác.
 
-Khi chạy thành công, `mv2.ps1` có thể tạo backup:
+Khi chạy riêng, `mv2.ps1` có thể tạo backup:
 
 ```text
 browser.dll.BAK
 ```
 
 Nếu đã patch rồi, script sẽ báo trạng thái `Already patched` cho các flag tương ứng.
+
+Trong luồng installer chính, file backup này được xóa lại ở bước dọn dẹp hậu kì.
 
 ## Tạo profile riêng
 

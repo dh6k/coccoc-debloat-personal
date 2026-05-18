@@ -87,6 +87,42 @@ function Invoke-CocCocMv2Patch([string]$browserPath) {
     }
 }
 
+function Invoke-CocCocPostInstallCleanup([string]$browserPath) {
+    if (-not $browserPath) {
+        Write-Host "Skipping post-install cleanup because installed browser.exe was not found." -ForegroundColor Yellow
+        return
+    }
+
+    $versionDir = Resolve-CocCocVersionDir -browserPath $browserPath
+    if (-not $versionDir) {
+        Write-Host "Skipping post-install cleanup because no Chromium version folder was found." -ForegroundColor Yellow
+        return
+    }
+
+    Write-Host "`nRunning post-install cleanup in $($versionDir.FullName)..." -ForegroundColor Cyan
+
+    $installerDir = Join-Path $versionDir.FullName "Installer"
+    @("browser.7z", "chrmstp.exe", "setup.exe") | ForEach-Object {
+        $target = Join-Path $installerDir $_
+        Remove-Item -LiteralPath $target -Force -ErrorAction SilentlyContinue
+    }
+
+    Remove-Item -LiteralPath (Join-Path $versionDir.FullName "browser.dll.BAK") -Force -ErrorAction SilentlyContinue
+
+    $extensionsDir = Join-Path $versionDir.FullName "Extensions"
+    @(
+        "cashback.crx",
+        "en2vi.crx",
+        "cache.crx",
+        "afaljjbleihmahhpckngondmgohleljb.json",
+        "gcopfpdkmpdacdmbjonfjmbnccmnjdoi.json",
+        "gfgbmghkdjckppeomloefmbphdfmokgd.json"
+    ) | ForEach-Object {
+        $target = Join-Path $extensionsDir $_
+        Remove-Item -LiteralPath $target -Force -ErrorAction SilentlyContinue
+    }
+}
+
 # Require Administrator
 if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
     Start-Process powershell.exe -ArgumentList @(
@@ -197,6 +233,7 @@ if ($browserPath -and (Test-Path -LiteralPath $browserPath)) {
 }
 
 # Cleanup
+Invoke-CocCocPostInstallCleanup -browserPath $browserPath
 Remove-Item $installer -ErrorAction SilentlyContinue
 
 Write-Host "`nCoc Coc installation completed!" -BackgroundColor DarkGreen
