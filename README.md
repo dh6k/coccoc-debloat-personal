@@ -82,7 +82,7 @@ C:\Program Files\CocCoc\Browser\Application\a.b.x.y
 11. Tạo shortcut `Cốc Cốc.lnk` với tham số:
 
 ```text
---no-first-run --no-default-browser-check --disable-features=CocCocSplitView,SidePanel --profile-directory=Default
+--no-first-run --no-default-browser-check --profile-directory=Default
 ```
 
 12. Dọn file thừa trong thư mục version `a.b.x.y`:

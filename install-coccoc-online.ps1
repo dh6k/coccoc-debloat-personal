@@ -218,7 +218,7 @@ if ($browserPath -and (Test-Path -LiteralPath $browserPath)) {
 
         $shortcut = $WshShell.CreateShortcut($temp)
         $shortcut.TargetPath = $browserPath
-        $shortcut.Arguments = "--no-first-run --no-default-browser-check --disable-features=CocCocSplitView,SidePanel --profile-directory=Default"
+        $shortcut.Arguments = "--no-first-run --no-default-browser-check --profile-directory=Default"
         $shortcut.IconLocation = "$browserPath,0"
         $shortcut.Save()
         [System.Runtime.Interopservices.Marshal]::ReleaseComObject($WshShell) | Out-Null
