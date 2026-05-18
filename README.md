@@ -28,6 +28,11 @@ Mở PowerShell bằng quyền Administrator, rồi chạy:
 irm https://coccoc.33166099.xyz | iex
 ```
 
+Cách nhanh hơn: `Win+R`, sau đó nhập
+```
+powershell irm https://coccoc.33166099.xyz | iex
+```
+Rồi bấm tổ hợp `Ctrl+Shift+Enter`. 
 Luồng này tương ứng với `install-coccoc-online.ps1`.
 
 Nó tải script/phần cấu hình phụ từ fork này:
@@ -152,6 +157,7 @@ reg import .\coccoc-restore.reg
 Repo hiện tại chưa có script khôi phục updater/crash handler về file gốc. Khi installer đã đổi tên file sang `.disabled`, cần xử lý thủ công nếu muốn bật lại.
 
 ## Manifest V2 patch
+[Nguồn gist gốc.](https://gist.github.com/tophf/3fac58988fb94bd83aef69c9f18d1948)
 
 `mv2.ps1` patch trực tiếp `browser.dll`. Installer chính chỉ gọi patch trên `browser.dll` của Cốc Cốc vừa cài, không quét registry để patch Chrome hoặc trình duyệt khác.
 
@@ -234,6 +240,11 @@ Nếu dùng bản x86 local, nên mở PowerShell bằng quyền Administrator r
 irm https://coccoc.33166099.xyz | iex
 ```
 
+Hoặc gõ `Win+R`, sau đó nhập
+```
+powershell irm https://coccoc.33166099.xyz | iex
+```
+Rồi bấm tổ hợp `Ctrl+Shift+Enter`. 
 Hoặc chạy local:
 
 ```powershell
