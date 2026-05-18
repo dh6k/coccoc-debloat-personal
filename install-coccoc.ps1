@@ -8,9 +8,103 @@ Cốc Cốc Browser Silent Installer
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 chcp 65001 | Out-Null
 
+$ScriptDir = if ($PSScriptRoot) {
+    $PSScriptRoot
+}
+elseif ($PSCommandPath) {
+    Split-Path -Parent $PSCommandPath
+}
+else {
+    (Get-Location).Path
+}
+
+function Resolve-CocCocBrowserPath {
+    $candidates = @(
+        "${env:ProgramFiles}\CocCoc\Browser\Application\browser.exe",
+        "${env:ProgramFiles(x86)}\CocCoc\Browser\Application\browser.exe"
+    )
+
+    foreach ($candidate in $candidates) {
+        if (Test-Path -LiteralPath $candidate) {
+            return $candidate
+        }
+    }
+
+    return $null
+}
+
+function Resolve-CocCocVersionDir([string]$browserPath) {
+    if (-not $browserPath) {
+        return $null
+    }
+
+    $applicationDir = Split-Path -Parent $browserPath
+    if (-not (Test-Path -LiteralPath $applicationDir)) {
+        return $null
+    }
+
+    Get-ChildItem -LiteralPath $applicationDir -Directory -ErrorAction SilentlyContinue |
+        Where-Object {
+            $_.Name -match '^\d+\.\d+\.\d+\.\d+$' -and
+            (Test-Path -LiteralPath (Join-Path $_.FullName "browser.dll"))
+        } |
+        Sort-Object { [version]$_.Name } -Descending |
+        Select-Object -First 1
+}
+
+function Invoke-CocCocMv2Patch([string]$browserPath) {
+    if (-not $browserPath) {
+        Write-Host "Skipping MV2 patch because installed browser.exe was not found." -ForegroundColor Yellow
+        return
+    }
+
+    $mv2Source = Join-Path $ScriptDir "mv2.ps1"
+    if (-not (Test-Path -LiteralPath $mv2Source)) {
+        Write-Host "Skipping MV2 patch because mv2.ps1 is missing: $mv2Source" -ForegroundColor Yellow
+        return
+    }
+
+    $versionDir = Resolve-CocCocVersionDir -browserPath $browserPath
+    if (-not $versionDir) {
+        Write-Host "Skipping MV2 patch because no Chromium version folder with browser.dll was found." -ForegroundColor Yellow
+        return
+    }
+
+    Get-Process -Name "browser" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+
+    $mv2Target = Join-Path $versionDir.FullName "mv2.ps1"
+    $browserDll = Join-Path $versionDir.FullName "browser.dll"
+    Copy-Item -LiteralPath $mv2Source -Destination $mv2Target -Force
+
+    Write-Host "`nApplying Manifest V2 patch in $($versionDir.FullName)..." -ForegroundColor Cyan
+    $mv2Process = Start-Process -FilePath "powershell.exe" -ArgumentList @(
+        "-NoProfile",
+        "-ExecutionPolicy", "Bypass",
+        "-NonInteractive",
+        "-File", "`"$mv2Target`"",
+        "-dll", "`"$browserDll`"",
+        "-NoPause"
+    ) -WorkingDirectory $versionDir.FullName -Wait -PassThru -NoNewWindow
+
+    if ($mv2Process.ExitCode -ne 0) {
+        Write-Host "Manifest V2 patch failed with exit code $($mv2Process.ExitCode)." -ForegroundColor Red
+        exit $mv2Process.ExitCode
+    }
+}
+
 # Require Administrator
 if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
-    Start-Process powershell.exe "-NoProfile -ExecutionPolicy Bypass -Command `"irm https://go.bibica.net/coccoc | iex`"" -Verb RunAs
+    $scriptPath = if ($PSCommandPath) { $PSCommandPath } else { $MyInvocation.MyCommand.Path }
+    if (-not $scriptPath) {
+        Write-Host "Cannot determine the local script path. Please run this file directly." -ForegroundColor Red
+        exit 1
+    }
+
+    Start-Process powershell.exe -ArgumentList @(
+        "-NoProfile",
+        "-ExecutionPolicy", "Bypass",
+        "-File", "`"$scriptPath`""
+    ) -Verb RunAs
     exit
 }
 
@@ -41,19 +135,17 @@ $urls = @(
 
 foreach ($url in $urls) {
     try {
-        # Use WebClient for faster download
-        $webClient = New-Object System.Net.WebClient
-        $webClient.DownloadFile($url, $installer)
-        $webClient.Dispose()
+        $ProgressPreference = 'SilentlyContinue'
+        Invoke-WebRequest -Uri $url -OutFile $installer -UseBasicParsing -TimeoutSec 30
         break
     }
-    catch { 
-        if ($webClient) { $webClient.Dispose() }
-        continue 
-    }
+    catch { continue }
 }
 
 Start-Process -FilePath $installer -ArgumentList "/silent /install" -Wait
+
+$browserPath = Resolve-CocCocBrowserPath
+Invoke-CocCocMv2Patch -browserPath $browserPath
 
 # Disable updater & crash handler
 Get-Item "${env:ProgramFiles}\CocCoc\Update\*\CocCocCrashHandler*.exe", "${env:ProgramFiles(x86)}\CocCoc\Update\*\CocCocCrashHandler*.exe", "${env:ProgramFiles}\CocCoc\Update\CocCocUpdate.exe", "${env:ProgramFiles(x86)}\CocCoc\Update\CocCocUpdate.exe" -ErrorAction SilentlyContinue | ForEach-Object {
@@ -67,21 +159,29 @@ Get-Item "${env:ProgramFiles}\CocCoc\Update\*\CocCocCrashHandler*.exe", "${env:P
 # Remove scheduled tasks
 Get-ScheduledTask -TaskName "CocCoc*" -ErrorAction SilentlyContinue | Unregister-ScheduledTask -Confirm:$false -ErrorAction SilentlyContinue
 
-# Apply registry tweaks
-try {
-    $reg = "$env:TEMP\debloat.reg"
-    Invoke-WebRequest -Uri "https://raw.githubusercontent.com/bibicadotnet/coccoc-debloat/refs/heads/main/coccoc-debloat.reg" -OutFile $reg -UseBasicParsing -TimeoutSec 15
-    Start-Process "regedit.exe" -ArgumentList "/s `"$reg`"" -Wait -NoNewWindow
-    Remove-Item $reg -ErrorAction SilentlyContinue
-} catch {}
+# Apply local registry tweaks
+$localRegFiles = @(
+    (Join-Path $ScriptDir "coccoc-restore.reg"),
+    (Join-Path $ScriptDir "coccoc-debloat.reg")
+)
 
-# Create shortcuts
-$browserPath = "${env:ProgramFiles}\CocCoc\Browser\Application\browser.exe"
-if (-not (Test-Path $browserPath)) {
-    $browserPath = "${env:ProgramFiles(x86)}\CocCoc\Browser\Application\browser.exe"
+foreach ($regFile in $localRegFiles) {
+    if (-not (Test-Path -LiteralPath $regFile)) {
+        Write-Host "Skipping missing registry file: $regFile" -ForegroundColor Yellow
+        continue
+    }
+
+    $regProcess = Start-Process -FilePath "reg.exe" -ArgumentList @("import", $regFile) -Wait -PassThru -NoNewWindow
+    if ($regProcess.ExitCode -ne 0) {
+        Write-Host "Failed to import registry file: $regFile" -ForegroundColor Red
+        exit $regProcess.ExitCode
+    }
 }
 
-if (Test-Path $browserPath) {
+# Create shortcuts
+$browserPath = Resolve-CocCocBrowserPath
+
+if ($browserPath -and (Test-Path -LiteralPath $browserPath)) {
     # Remove old shortcuts from ALL locations
     @(
         [Environment]::GetFolderPath("Desktop"),
@@ -104,7 +204,7 @@ if (Test-Path $browserPath) {
         
         $shortcut = $WshShell.CreateShortcut($temp)
         $shortcut.TargetPath = $browserPath
-        $shortcut.Arguments = "--no-first-run --no-default-browser-check --disable-features=CocCocSplitView,SidePanel,ExtensionManifestV2Unsupported,ExtensionManifestV2Disabled --profile-directory=Default"
+        $shortcut.Arguments = "--no-first-run --no-default-browser-check --disable-features=CocCocSplitView,SidePanel --profile-directory=Default"
         $shortcut.IconLocation = "$browserPath,0"
         $shortcut.Save()
         [System.Runtime.Interopservices.Marshal]::ReleaseComObject($WshShell) | Out-Null
